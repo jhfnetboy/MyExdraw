@@ -1,0 +1,10 @@
+tunnel: d0aeb980-e571-4f8e-b1d4-585aa87fa038
+credentials-file: /Volumes/UltraDisk/Dev2/tools/MyExdraw/cloudflared/exdraw-tunnel.json
+
+ingress:
+  - hostname: myexdraw.aastar.io
+    path: /api/v2/*
+    service: http://localhost:9888
+  - hostname: myexdraw.aastar.io
+    service: http://localhost:9887
+  - service: http_status:404

@@ -1,0 +1,33 @@
+services:
+  excalidraw:
+    image: alswl/excalidraw:latest
+    platform: linux/amd64
+    ports:
+      - "9887:80"
+    environment:
+      - VITE_APP_BACKEND_V2_GET_URL=${EXDRAW_BACKEND_V2_GET_URL:-https://myexdraw.aastar.io/api/v2/scenes/}
+      - VITE_APP_BACKEND_V2_POST_URL=${EXDRAW_BACKEND_V2_POST_URL:-https://myexdraw.aastar.io/api/v2/scenes/}
+      - VITE_APP_HTTP_STORAGE_BACKEND_URL=${EXDRAW_HTTP_STORAGE_BACKEND_URL:-https://myexdraw.aastar.io/api/v2}
+      - VITE_APP_STORAGE_BACKEND=${EXDRAW_STORAGE_BACKEND:-https}
+    restart: unless-stopped
+
+  excalidraw-storage:
+    image: alswl/excalidraw-storage-backend:v2023.11.11
+    platform: linux/amd64
+    ports:
+      - "9888:8081"
+    depends_on:
+      - redis
+    environment:
+      - PORT=8081
+      - STORAGE_URI=redis://redis:6379
+    volumes:
+      - ./excalidraw_data:/app/storage
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    volumes:
+      - ./redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
