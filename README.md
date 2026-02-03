@@ -1,3 +1,22 @@
+# MyExDraw数字公共物品产品说明（免费与订阅分级）
+这是一个使用Mycelium协议的范例DApp：数据在你本地，根据隐私程度，不同加密级别，存储到远端，然后提供一些服务。
+核心是：链上存储用户身份，数据存储在本地，不会因为身份和数据都在大平台而被360度裸体泄露。
+提供开源代码，可以自己部署，提供公共物品，个人一定程度免费使用，提供订阅服务，个人或者小团队可以根据资源需要升级。
+## MyExDraw数字公共物品
+- 面向对象：个人与小团队的私有白板与只读分享
+- 能力与隐私：
+- 自建私有画板与一键生成只读链接
+- 端到端加密、密文存储，服务端不可见明文
+- 链接 # 片段携带解密密钥，仅持有完整链接者可查看
+- 分级方案：
+- 免费版：可创建 1 个画布（本地编辑），服务器提供加密存储和分享链接，用于体验与个人使用，需要Reputation大于10,以及是Mycelium协议任意社区注册成员。
+- 订阅 10 元/年：最多 100 个私密存储和公开分享链接/年（可滚动更新），适合小团队轻量共享，如果Reputation大于30,可以支付100 aPNTs 获得 1年订阅。
+- 订阅 30 元/终生：最多 1000 个公开分享链接/终生，适合长期归档与广泛分享,如果Reputation大于50,可以支付300 aPNTs 获得 1年订阅。
+- 计划节奏：
+- 当前已提供核心功能（绘制/导出/查看）；登录与成员校验将按后续版本逐步开放
+
+
+## 极简部署方案（无需订阅, FREE 版本）
 如果你不需要复杂的实时协作，只想实现“**自建私有画板 + 一键生成只读分享链接**”的功能，部署过程会简单很多。你只需要关注**前端（Frontend）和存储后端（Storage）**。
 需要你：
 有一个自己的Mac mini
@@ -32,8 +51,8 @@ services:
     environment:
       # 将 your-domain.com 换成你的服务器 IP 或域名
       # 分享链接会通过这个 API 接口存取数据
-      - VITE_APP_BACKEND_V2_GET=https://your-domain.com/api/v2/scenes/
-      - VITE_APP_BACKEND_V2_POST=https://your-domain.com/api/v2/scenes/
+      - VITE_APP_BACKEND_V2_GET=https://exdraw.aastar.io/api/v2/scenes/
+      - VITE_APP_BACKEND_V2_POST=https://exdraw.aastar.io/api/v2/scenes/
     restart: always
 
   # 2. 后端存储：负责保存你分享出去的画布数据
