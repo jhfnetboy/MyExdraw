@@ -19,6 +19,10 @@
 - 计划节奏：
 - 当前已提供核心功能（绘制/导出/查看）；登录与成员校验将按后续版本逐步开放
 
+## Say thanks
+- 本项目基于 Excalidraw 的开源工作构建与部署，感谢 Excalidraw 团队与社区的贡献：https://github.com/excalidraw/excalidraw
+- 许可说明：Excalidraw 使用 MIT License；如涉及分发/二次发布，将保留其版权与许可文本以确保合规
+
 
 ## 极简部署方案（无需订阅, FREE 版本）
 如果你不需要复杂的实时协作，只想实现“**自建私有画板 + 一键生成只读分享链接**”的功能，部署过程会简单很多。你只需要关注**前端（Frontend）和存储后端（Storage）**。

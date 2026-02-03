@@ -1,9 +1,19 @@
 services:
+  web:
+    image: nginx:1.27-alpine
+    ports:
+      - "9887:80"
+    depends_on:
+      - excalidraw
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
   excalidraw:
     image: alswl/excalidraw:latest
     platform: linux/amd64
-    ports:
-      - "9887:80"
+    expose:
+      - "80"
     environment:
       - VITE_APP_BACKEND_V2_GET_URL=${EXDRAW_BACKEND_V2_GET_URL:-https://myexdraw.aastar.io/api/v2/scenes/}
       - VITE_APP_BACKEND_V2_POST_URL=${EXDRAW_BACKEND_V2_POST_URL:-https://myexdraw.aastar.io/api/v2/scenes/}

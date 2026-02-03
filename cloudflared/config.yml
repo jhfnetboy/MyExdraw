@@ -1,5 +1,5 @@
-tunnel: d0aeb980-e571-4f8e-b1d4-585aa87fa038
-credentials-file: /Volumes/UltraDisk/Dev2/tools/MyExdraw/cloudflared/exdraw-tunnel.json
+tunnel: exdraw-tunnel
+credentials-file: ./cloudflared/exdraw-tunnel.json
 
 ingress:
   - hostname: myexdraw.aastar.io
