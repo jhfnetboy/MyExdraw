@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXCALIDRAW_DIR="$ROOT_DIR/vendor/excalidraw"
-DEFAULT_PORTS=(5173 9887 9888)
+DEFAULT_PORTS=(5173 5788 9887 9888)
 TUNNEL_CONFIG_REL="cloudflared/config.yml"
 TUNNEL_PID_FILE="${TMPDIR:-/tmp}/myexdraw-cloudflared.pid"
 TUNNEL_LOG_FILE="${TMPDIR:-/tmp}/myexdraw-cloudflared.log"
@@ -29,7 +29,10 @@ Commands:
   docker:ps         Show docker compose status
   docker:clean      Stop stack and remove local images/volumes/cache
   ports:kill        Kill processes listening on ports (default: 5173 9887 9888)
+  ports:who         Show what is listening on ports (default: 5173 5788 9887 9888)
   tunnel:start      Start cloudflared tunnel (background)
+  tunnel:status     Show cloudflared tunnel status
+  tunnel:logs       Tail cloudflared tunnel log
   tunnel:stop       Stop cloudflared tunnel
   tunnel:restart    Restart cloudflared tunnel
   local:test        Test localhost:9887 (web) and :9888 (storage)
@@ -62,6 +65,20 @@ kill_ports() {
   done
 }
 
+who_ports() {
+  require_cmd lsof
+  local ports=("$@")
+  if [[ ${#ports[@]} -eq 0 ]]; then
+    ports=("${DEFAULT_PORTS[@]}")
+  fi
+
+  local port
+  for port in "${ports[@]}"; do
+    echo "---- :${port} ----"
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN || true
+  done
+}
+
 is_tunnel_running() {
   if [[ -f "$TUNNEL_PID_FILE" ]]; then
     local pid
@@ -90,6 +107,26 @@ start_tunnel() {
   echo "$!" >"$TUNNEL_PID_FILE"
   echo "Tunnel started (pid $!)"
   echo "Log: $TUNNEL_LOG_FILE"
+}
+
+status_tunnel() {
+  if is_tunnel_running; then
+    echo "Tunnel running (pid $(cat "$TUNNEL_PID_FILE"))"
+    echo "Log: $TUNNEL_LOG_FILE"
+    return 0
+  fi
+  echo "Tunnel not running"
+  echo "Log: $TUNNEL_LOG_FILE"
+  return 0
+}
+
+logs_tunnel() {
+  if [[ -f "$TUNNEL_LOG_FILE" ]]; then
+    tail -n 200 "$TUNNEL_LOG_FILE"
+    return 0
+  fi
+  echo "No tunnel log file at $TUNNEL_LOG_FILE"
+  return 0
 }
 
 stop_tunnel() {
@@ -201,8 +238,18 @@ case "$cmd" in
     shift || true
     kill_ports "$@"
     ;;
+  ports:who)
+    shift || true
+    who_ports "$@"
+    ;;
   tunnel:start)
     start_tunnel
+    ;;
+  tunnel:status)
+    status_tunnel
+    ;;
+  tunnel:logs)
+    logs_tunnel
     ;;
   tunnel:stop)
     stop_tunnel
