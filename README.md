@@ -47,6 +47,8 @@
 ```
 
 ## 发布 Docker 镜像（可被任何人拉取）
+https://hub.docker.com/r/aastar/myexdraw-excalidraw  
+
 下面以 Docker Hub 为例（当前仓库发布到 `aastar/myexdraw-excalidraw:latest`）。
 
 ```bash
