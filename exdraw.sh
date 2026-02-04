@@ -2,68 +2,24 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXCALIDRAW_DIR="$ROOT_DIR/vendor/excalidraw"
-DEFAULT_PORTS=(5173 5788 9887 9888)
 TUNNEL_CONFIG_REL="cloudflared/config.yml"
 TUNNEL_PID_FILE="${TMPDIR:-/tmp}/myexdraw-cloudflared.pid"
 TUNNEL_LOG_FILE="${TMPDIR:-/tmp}/myexdraw-cloudflared.log"
+PUBLIC_DOMAIN_BASE="${EXDRAW_PUBLIC_DOMAIN_BASE:-https://myexdraw.aastar.io}"
 
 usage() {
   cat <<'EOF'
 Usage: ./exdraw.sh <command>
 
-Most used:
-  ./exdraw.sh docker:ensure      Start local stack, build image only if missing
-  ./exdraw.sh local:test         Check localhost UI/storage health
-  ./exdraw.sh tunnel:restart     Restart cloudflared tunnel (background)
-  ./exdraw.sh domain:test        Check https://myexdraw.aastar.io health
-  ./exdraw.sh full:check         One-shot: kill ports + ensure docker + restart tunnel + test domain
-
-Quick flows:
-  Local only:
-    ./exdraw.sh docker:up
-    ./exdraw.sh local:test
-
-  Publish to domain (tunnel):
-    ./exdraw.sh docker:ensure
-    ./exdraw.sh tunnel:restart
-    ./exdraw.sh domain:test
-
-  Port conflict:
-    ./exdraw.sh ports:who
-    ./exdraw.sh ports:kill
-
-  Kill old tunnel processes:
-    ./exdraw.sh tunnel:killall
-    ./exdraw.sh tunnel:start
-
 Commands:
-  web:start         Start local web dev server (Vite) on :5173
-  web:stop          Stop local web dev server on :5173
-  web:open          Print local web URL
-  web:test          Curl local web dev server (:5173)
-  lint              Run eslint (yarn test:code)
-  typecheck         Run TypeScript typecheck (yarn test:typecheck)
-  build             Build excalidraw app (yarn build:app:docker)
-  docker:build      Build local docker image (linux/amd64) as myexdraw-excalidraw:local
-  docker:build:legacy  Build local docker image with DOCKER_BUILDKIT=0
-  docker:ensure     Build image if missing, then start compose
-  docker:up         Start docker compose stack
-  docker:restart    Restart web+excalidraw services using current images
-  docker:down       Stop docker compose stack
-  docker:ps         Show docker compose status
-  docker:clean      Stop stack and remove local images/volumes/cache
-  ports:kill        Kill processes listening on ports (default: 5173 9887 9888)
-  ports:who         Show what is listening on ports (default: 5173 5788 9887 9888)
-  tunnel:start      Start cloudflared tunnel (background)
-  tunnel:status     Show cloudflared tunnel status
-  tunnel:logs       Tail cloudflared tunnel log
-  tunnel:killall    Force stop all matching cloudflared tunnel processes
-  tunnel:stop       Stop cloudflared tunnel
-  tunnel:restart    Restart cloudflared tunnel
-  local:test        Test localhost:9887 (web) and :9888 (storage)
-  domain:test       Test https://myexdraw.aastar.io and /api/v2/
-  full:check        ports:kill + docker:ensure + tunnel:restart + domain:test
+  docker   Show local docker status (no build, no start)
+  tunnel   Restart cloudflared tunnel
+  test     Curl public domain health
+
+Examples:
+  ./exdraw.sh docker
+  ./exdraw.sh tunnel
+  ./exdraw.sh test
 EOF
 }
 
@@ -71,38 +27,27 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "Missing required command: $1" >&2; exit 1; }
 }
 
-kill_ports() {
-  require_cmd lsof
-  local ports=("$@")
-  if [[ ${#ports[@]} -eq 0 ]]; then
-    ports=("${DEFAULT_PORTS[@]}")
-  fi
+run_with_timeout() {
+  local seconds="$1"
+  shift
 
-  local port
-  for port in "${ports[@]}"; do
-    local pids
-    pids="$(lsof -ti "tcp:${port}" || true)"
-    if [[ -n "$pids" ]]; then
-      echo "$pids" | xargs kill -9 || true
-      echo "Killed processes on :${port}"
-    else
-      echo "No process is listening on :${port}"
+  "$@" &
+  local pid="$!"
+
+  local elapsed=0
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    if [[ "$elapsed" -ge "$seconds" ]]; then
+      kill -TERM "$pid" >/dev/null 2>&1 || true
+      sleep 1 || true
+      kill -KILL "$pid" >/dev/null 2>&1 || true
+      wait "$pid" || true
+      return 124
     fi
+    sleep 1 || true
+    elapsed=$((elapsed + 1))
   done
-}
 
-who_ports() {
-  require_cmd lsof
-  local ports=("$@")
-  if [[ ${#ports[@]} -eq 0 ]]; then
-    ports=("${DEFAULT_PORTS[@]}")
-  fi
-
-  local port
-  for port in "${ports[@]}"; do
-    echo "---- :${port} ----"
-    lsof -nP -iTCP:"${port}" -sTCP:LISTEN || true
-  done
+  wait "$pid"
 }
 
 is_tunnel_running() {
@@ -124,50 +69,10 @@ start_tunnel() {
     exit 1
   fi
 
-  if is_tunnel_running; then
-    echo "Tunnel already running (pid $(cat "$TUNNEL_PID_FILE"))"
-    return 0
-  fi
-
   nohup cloudflared tunnel --config "./$TUNNEL_CONFIG_REL" run >"$TUNNEL_LOG_FILE" 2>&1 &
   echo "$!" >"$TUNNEL_PID_FILE"
   echo "Tunnel started (pid $!)"
   echo "Log: $TUNNEL_LOG_FILE"
-}
-
-status_tunnel() {
-  if is_tunnel_running; then
-    echo "Tunnel running (pid $(cat "$TUNNEL_PID_FILE"))"
-    echo "Log: $TUNNEL_LOG_FILE"
-    return 0
-  fi
-  echo "Tunnel not running"
-  echo "Log: $TUNNEL_LOG_FILE"
-  return 0
-}
-
-logs_tunnel() {
-  if [[ -f "$TUNNEL_LOG_FILE" ]]; then
-    tail -n 200 "$TUNNEL_LOG_FILE"
-    return 0
-  fi
-  echo "No tunnel log file at $TUNNEL_LOG_FILE"
-  return 0
-}
-
-killall_tunnel() {
-  require_cmd pgrep
-  local pattern="cloudflared tunnel --config .*/${TUNNEL_CONFIG_REL} run"
-  local pids
-  pids="$(pgrep -f "$pattern" || true)"
-  if [[ -z "$pids" ]]; then
-    echo "No matching cloudflared tunnel process found"
-    rm -f "$TUNNEL_PID_FILE" || true
-    return 0
-  fi
-  echo "$pids" | xargs kill -9 || true
-  rm -f "$TUNNEL_PID_FILE" || true
-  echo "Killed tunnel pids: $(echo "$pids" | tr '\n' ' ')"
 }
 
 stop_tunnel() {
@@ -180,154 +85,56 @@ stop_tunnel() {
     return 0
   fi
 
-  echo "Tunnel not running"
   rm -f "$TUNNEL_PID_FILE" || true
 }
 
 curl_code() {
   require_cmd curl
   local url="$1"
-  curl --connect-timeout 2 --max-time 8 -fsS -o /dev/null -w "HTTP %{http_code}  ${url}\n" "$url" || echo "HTTP ???  ${url}"
+  curl --connect-timeout 2 --max-time 8 -sS -o /dev/null -w "HTTP %{http_code}  ${url}\n" "$url" || echo "HTTP ???  ${url}"
+}
+
+restart_tunnel() {
+  require_cmd cloudflared
+  cd "$ROOT_DIR"
+
+  stop_tunnel
+  require_cmd pkill
+  pkill -f "cloudflared tunnel --config .*/${TUNNEL_CONFIG_REL} run" >/dev/null 2>&1 || true
+  start_tunnel
+}
+
+test_public_domain() {
+  curl_code "${PUBLIC_DOMAIN_BASE}/"
+  curl_code "${PUBLIC_DOMAIN_BASE}/api/v2/"
+}
+
+docker_status() {
+  require_cmd docker
+  cd "$ROOT_DIR"
+
+  if run_with_timeout 5 docker info >/dev/null 2>&1; then
+    echo "Docker: OK"
+  else
+    echo "Docker: NOT RUNNING" >&2
+    exit 1
+  fi
+
+  docker compose ps || true
+  curl_code "http://localhost:9887/"
+  curl_code "http://localhost:9888/api/v2/"
 }
 
 cmd="${1:-}"
 case "$cmd" in
-  web:start)
-    require_cmd yarn
-    cd "$EXCALIDRAW_DIR"
-    exec yarn --no-default-rc --cwd ./excalidraw-app vite --host 0.0.0.0 --port 5173
+  docker)
+    docker_status
     ;;
-  web:stop)
-    require_cmd lsof
-    pids="$(lsof -ti tcp:5173 || true)"
-    if [[ -z "$pids" ]]; then
-      echo "No process is listening on :5173"
-      exit 0
-    fi
-    echo "$pids" | xargs kill
+  tunnel)
+    restart_tunnel
     ;;
-  web:open)
-    echo "http://localhost:5173/"
-    ;;
-  web:test)
-    curl_code "http://localhost:5173/"
-    ;;
-  lint)
-    require_cmd yarn
-    cd "$EXCALIDRAW_DIR"
-    yarn test:code
-    ;;
-  typecheck)
-    require_cmd yarn
-    cd "$EXCALIDRAW_DIR"
-    yarn test:typecheck
-    ;;
-  build)
-    require_cmd yarn
-    cd "$EXCALIDRAW_DIR"
-    yarn build:app:docker
-    ;;
-  docker:build)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    docker buildx build --platform linux/amd64 -t myexdraw-excalidraw:local --load "$EXCALIDRAW_DIR"
-    ;;
-  docker:build:legacy)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    DOCKER_BUILDKIT=0 docker build -t myexdraw-excalidraw:local "$EXCALIDRAW_DIR"
-    ;;
-  docker:ensure)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    if ! docker image inspect myexdraw-excalidraw:local >/dev/null 2>&1; then
-      docker buildx build --platform linux/amd64 -t myexdraw-excalidraw:local --load "$EXCALIDRAW_DIR"
-    fi
-    docker compose up -d
-    docker compose ps
-    ;;
-  docker:up)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    docker compose up -d
-    ;;
-  docker:restart)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    docker compose up -d --force-recreate web excalidraw
-    ;;
-  docker:down)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    docker compose down
-    ;;
-  docker:ps)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    docker compose ps
-    ;;
-  docker:clean)
-    require_cmd docker
-    cd "$ROOT_DIR"
-    docker compose down --remove-orphans --volumes || true
-    docker image rm -f myexdraw-excalidraw:local || true
-    docker image prune -af || true
-    docker builder prune -af || true
-    docker system prune -af --volumes || true
-    ;;
-  ports:kill)
-    shift || true
-    kill_ports "$@"
-    ;;
-  ports:who)
-    shift || true
-    who_ports "$@"
-    ;;
-  tunnel:start)
-    start_tunnel
-    ;;
-  tunnel:status)
-    status_tunnel
-    ;;
-  tunnel:logs)
-    logs_tunnel
-    ;;
-  tunnel:killall)
-    killall_tunnel
-    ;;
-  tunnel:stop)
-    stop_tunnel
-    ;;
-  tunnel:restart)
-    stop_tunnel
-    start_tunnel
-    ;;
-  local:test)
-    curl_code "http://localhost:9887/"
-    curl_code "http://localhost:9888/"
-    ;;
-  domain:test)
-    curl_code "https://myexdraw.aastar.io/"
-    curl_code "https://myexdraw.aastar.io/api/v2/"
-    ;;
-  full:check)
-    kill_ports
-    if docker info >/dev/null 2>&1; then
-      cmd="docker:ensure"
-      cd "$ROOT_DIR"
-      if ! docker image inspect myexdraw-excalidraw:local >/dev/null 2>&1; then
-        docker buildx build --platform linux/amd64 -t myexdraw-excalidraw:local --load "$EXCALIDRAW_DIR"
-      fi
-      docker compose up -d
-      docker compose ps
-    else
-      echo "Docker daemon not available" >&2
-      exit 1
-    fi
-    stop_tunnel
-    start_tunnel
-    curl_code "https://myexdraw.aastar.io/"
-    curl_code "https://myexdraw.aastar.io/api/v2/"
+  test)
+    test_public_domain
     ;;
   ""|-h|--help|help)
     usage

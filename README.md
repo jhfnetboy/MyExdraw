@@ -24,67 +24,29 @@
 - 许可说明：Excalidraw 使用 MIT License；如涉及分发/二次发布，将保留其版权与许可文本以确保合规
 
 ## 开发与运维快捷命令（exdraw.sh）
-仓库根目录提供了一个脚本 `./exdraw.sh`，用于一键完成常见操作：端口清理、本地启动、Docker 启动/构建、Cloudflare Tunnel 启动、域名健康检查。
+仓库根目录提供了一个脚本 `./exdraw.sh`，只保留 3 个命令：docker / tunnel / test。
 
 ### 常见场景
 
-1) 只做本地验证（不需要 Tunnel）
+1) 查看本机服务状态（不 build、不启动）
 
 ```bash
-./exdraw.sh docker:up
-./exdraw.sh local:test
+./exdraw.sh docker
 ```
 
-本地访问：
-- UI: http://localhost:9887/
-- Storage: http://localhost:9888/
-
-2) 镜像已经构建过，不想每次都 rebuild（推荐）
+2) Tunnel 重启（让公网域名指向本机服务）
 
 ```bash
-./exdraw.sh docker:ensure
+./exdraw.sh tunnel
 ```
 
-说明：如果本地已存在 `myexdraw-excalidraw:local`，不会重新构建；否则会先构建一次再启动。
-
-3) 你修改了前端代码，需要重新构建镜像
+3) 公网域名健康检查（curl）
 
 ```bash
-./exdraw.sh docker:build
-./exdraw.sh docker:restart
-./exdraw.sh local:test
+./exdraw.sh test
 ```
 
-4) 启动/重启 Cloudflare Tunnel
-
-```bash
-./exdraw.sh tunnel:restart
-./exdraw.sh domain:test
-```
-
-5) 端口占用导致启动失败（先清理再启动）
-
-```bash
-./exdraw.sh ports:kill
-./exdraw.sh docker:ensure
-./exdraw.sh tunnel:restart
-```
-
-6) 一键全流程自检（适合发布前）
-
-```bash
-./exdraw.sh full:check
-```
-
-7) 清理旧镜像与缓存（节省空间）
-
-```bash
-./exdraw.sh docker:clean
-docker image rm -f alswl/excalidraw:latest || true
-```
-
-### Docker 空间提示（重要）
-如果你遇到 `metadata_v2.db: input/output error` 或构建非常慢，通常是 Docker Desktop 的数据盘在系统盘、系统盘空间不足导致。请在 Docker Desktop 设置里把 Disk image / Data folder 移动到大磁盘（例如外置盘），再重新构建。
+说明：域名默认是 `https://myexdraw.aastar.io`，可用环境变量 `EXDRAW_PUBLIC_DOMAIN_BASE` 覆盖。
 
 
 ## 极简部署方案（无需订阅, FREE 版本）
