@@ -10,8 +10,7 @@ services:
     restart: unless-stopped
 
   excalidraw:
-    image: myexdraw-excalidraw:local
-    platform: linux/amd64
+    image: ${EXDRAW_EXCALIDRAW_IMAGE:-myexdraw-excalidraw:local}
     expose:
       - "80"
     environment:
@@ -23,7 +22,6 @@ services:
 
   excalidraw-storage:
     image: alswl/excalidraw-storage-backend:v2023.11.11
-    platform: linux/amd64
     ports:
       - "9888:8081"
     depends_on:

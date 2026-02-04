@@ -46,6 +46,24 @@
 ./exdraw.sh test
 ```
 
+## 发布 Docker 镜像（可被任何人拉取）
+下面以 Docker Hub 为例（当前仓库发布到 `aastar/myexdraw-excalidraw:latest`）。
+
+```bash
+cd /Volumes/UltraDisk/Dev2/tools/MyExdraw
+
+docker login
+
+IMAGE="docker.io/aastar/myexdraw-excalidraw:latest"
+docker buildx build --platform linux/amd64,linux/arm64 -t "$IMAGE" --push vendor/excalidraw
+```
+
+发布后，任何人可以在本仓库里用 1 条命令拉取并启动（Compose 会自动 pull 镜像）：
+
+```bash
+EXDRAW_EXCALIDRAW_IMAGE="docker.io/aastar/myexdraw-excalidraw:latest" docker compose up -d
+```
+
 说明：域名默认是 `https://myexdraw.aastar.io`，可用环境变量 `EXDRAW_PUBLIC_DOMAIN_BASE` 覆盖。
 
 
