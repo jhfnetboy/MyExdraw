@@ -1,4 +1,5 @@
 # MyExDraw数字公共物品产品说明（免费与订阅分级）
+![myexdraw-snapshot](myexdraw-snapshot.png)
 这是一个使用Mycelium协议的范例DApp数字公共物品,希望具备这些特征：
 - 数据存在你本地,不会因为身份和数据都在大平台而被360度裸体泄露
 - 根据隐私程度，不同加密级别，存储到远端(not required)
