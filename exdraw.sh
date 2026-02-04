@@ -12,6 +12,31 @@ usage() {
   cat <<'EOF'
 Usage: ./exdraw.sh <command>
 
+Most used:
+  ./exdraw.sh docker:ensure      Start local stack, build image only if missing
+  ./exdraw.sh local:test         Check localhost UI/storage health
+  ./exdraw.sh tunnel:restart     Restart cloudflared tunnel (background)
+  ./exdraw.sh domain:test        Check https://myexdraw.aastar.io health
+  ./exdraw.sh full:check         One-shot: kill ports + ensure docker + restart tunnel + test domain
+
+Quick flows:
+  Local only:
+    ./exdraw.sh docker:up
+    ./exdraw.sh local:test
+
+  Publish to domain (tunnel):
+    ./exdraw.sh docker:ensure
+    ./exdraw.sh tunnel:restart
+    ./exdraw.sh domain:test
+
+  Port conflict:
+    ./exdraw.sh ports:who
+    ./exdraw.sh ports:kill
+
+  Kill old tunnel processes:
+    ./exdraw.sh tunnel:killall
+    ./exdraw.sh tunnel:start
+
 Commands:
   web:start         Start local web dev server (Vite) on :5173
   web:stop          Stop local web dev server on :5173
@@ -33,6 +58,7 @@ Commands:
   tunnel:start      Start cloudflared tunnel (background)
   tunnel:status     Show cloudflared tunnel status
   tunnel:logs       Tail cloudflared tunnel log
+  tunnel:killall    Force stop all matching cloudflared tunnel processes
   tunnel:stop       Stop cloudflared tunnel
   tunnel:restart    Restart cloudflared tunnel
   local:test        Test localhost:9887 (web) and :9888 (storage)
@@ -127,6 +153,21 @@ logs_tunnel() {
   fi
   echo "No tunnel log file at $TUNNEL_LOG_FILE"
   return 0
+}
+
+killall_tunnel() {
+  require_cmd pgrep
+  local pattern="cloudflared tunnel --config .*/${TUNNEL_CONFIG_REL} run"
+  local pids
+  pids="$(pgrep -f "$pattern" || true)"
+  if [[ -z "$pids" ]]; then
+    echo "No matching cloudflared tunnel process found"
+    rm -f "$TUNNEL_PID_FILE" || true
+    return 0
+  fi
+  echo "$pids" | xargs kill -9 || true
+  rm -f "$TUNNEL_PID_FILE" || true
+  echo "Killed tunnel pids: $(echo "$pids" | tr '\n' ' ')"
 }
 
 stop_tunnel() {
@@ -250,6 +291,9 @@ case "$cmd" in
     ;;
   tunnel:logs)
     logs_tunnel
+    ;;
+  tunnel:killall)
+    killall_tunnel
     ;;
   tunnel:stop)
     stop_tunnel
