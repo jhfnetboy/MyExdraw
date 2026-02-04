@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
 
   excalidraw:
-    image: alswl/excalidraw:latest
+    image: myexdraw-excalidraw:local
     platform: linux/amd64
     expose:
       - "80"

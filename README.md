@@ -23,6 +23,69 @@
 - 本项目基于 Excalidraw 的开源工作构建与部署，感谢 Excalidraw 团队与社区的贡献：https://github.com/excalidraw/excalidraw
 - 许可说明：Excalidraw 使用 MIT License；如涉及分发/二次发布，将保留其版权与许可文本以确保合规
 
+## 开发与运维快捷命令（exdraw.sh）
+仓库根目录提供了一个脚本 `./exdraw.sh`，用于一键完成常见操作：端口清理、本地启动、Docker 启动/构建、Cloudflare Tunnel 启动、域名健康检查。
+
+### 常见场景
+
+1) 只做本地验证（不需要 Tunnel）
+
+```bash
+./exdraw.sh docker:up
+./exdraw.sh local:test
+```
+
+本地访问：
+- UI: http://localhost:9887/
+- Storage: http://localhost:9888/
+
+2) 镜像已经构建过，不想每次都 rebuild（推荐）
+
+```bash
+./exdraw.sh docker:ensure
+```
+
+说明：如果本地已存在 `myexdraw-excalidraw:local`，不会重新构建；否则会先构建一次再启动。
+
+3) 你修改了前端代码，需要重新构建镜像
+
+```bash
+./exdraw.sh docker:build
+./exdraw.sh docker:restart
+./exdraw.sh local:test
+```
+
+4) 启动/重启 Cloudflare Tunnel
+
+```bash
+./exdraw.sh tunnel:restart
+./exdraw.sh domain:test
+```
+
+5) 端口占用导致启动失败（先清理再启动）
+
+```bash
+./exdraw.sh ports:kill
+./exdraw.sh docker:ensure
+./exdraw.sh tunnel:restart
+```
+
+6) 一键全流程自检（适合发布前）
+
+```bash
+./exdraw.sh full:check
+```
+
+7) 清理旧镜像与缓存（节省空间）
+
+```bash
+./exdraw.sh docker:clean
+docker image rm -f alswl/excalidraw:latest || true
+```
+
+### Docker 空间提示（重要）
+如果你遇到 `metadata_v2.db: input/output error` 或构建非常慢，通常是 Docker Desktop 的数据盘在系统盘、系统盘空间不足导致。请在 Docker Desktop 设置里把 Disk image / Data folder 移动到大磁盘（例如外置盘），再重新构建。
+
 
 ## 极简部署方案（无需订阅, FREE 版本）
 如果你不需要复杂的实时协作，只想实现“**自建私有画板 + 一键生成只读分享链接**”的功能，部署过程会简单很多。你只需要关注**前端（Frontend）和存储后端（Storage）**。
@@ -49,35 +112,56 @@ Excalidraw 的“分享链接”逻辑是：
 创建一个目录（如 `my-excalidraw`），编写 `docker-compose.yml`：
 
 ```yaml
-version: '3.3'
 services:
-  # 1. 前端：提供绘图界面
-  excalidraw:
-    image: alswl/excalidraw:latest
+  web:
+    image: nginx:1.27-alpine
     ports:
-      - "8080:80"
-    environment:
-      # 将 your-domain.com 换成你的服务器 IP 或域名
-      # 分享链接会通过这个 API 接口存取数据
-      - VITE_APP_BACKEND_V2_GET=https://exdraw.aastar.io/api/v2/scenes/
-      - VITE_APP_BACKEND_V2_POST=https://exdraw.aastar.io/api/v2/scenes/
-    restart: always
+      - "9887:80"
+    depends_on:
+      - excalidraw
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
 
-  # 2. 后端存储：负责保存你分享出去的画布数据
+  excalidraw:
+    image: myexdraw-excalidraw:local
+    platform: linux/amd64
+    expose:
+      - "80"
+    environment:
+      - VITE_APP_BACKEND_V2_GET_URL=${EXDRAW_BACKEND_V2_GET_URL:-https://myexdraw.aastar.io/api/v2/scenes/}
+      - VITE_APP_BACKEND_V2_POST_URL=${EXDRAW_BACKEND_V2_POST_URL:-https://myexdraw.aastar.io/api/v2/scenes/}
+      - VITE_APP_HTTP_STORAGE_BACKEND_URL=${EXDRAW_HTTP_STORAGE_BACKEND_URL:-https://myexdraw.aastar.io/api/v2}
+      - VITE_APP_STORAGE_BACKEND=${EXDRAW_STORAGE_BACKEND:-https}
+    restart: unless-stopped
+
   excalidraw-storage:
-    image: alswl/excalidraw-storage:latest
+    image: alswl/excalidraw-storage-backend:v2023.11.11
+    platform: linux/amd64
     ports:
-      - "8081:8081"
+      - "9888:8081"
+    depends_on:
+      - redis
+    environment:
+      - PORT=8081
+      - STORAGE_URI=redis://redis:6379
     volumes:
       - ./excalidraw_data:/app/storage
-    restart: always
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    volumes:
+      - ./redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
 
 ```
 
 **运行命令：**
 
 ```bash
-docker-compose up -d
+docker compose up -d
 
 ```
 
